@@ -1,0 +1,25 @@
+● sshd.service - OpenSSH server daemon
+     Loaded: loaded (/usr/lib/systemd/system/sshd.service; enabled; preset: enabled)
+    Drop-In: /usr/lib/systemd/system/service.d
+             └─10-timeout-abort.conf
+     Active: active (running) since Mon 2026-09-14 20:59:23 -03; 4min 51s ago
+ Invocation: aff61ca996b24c2db88e353911c2a607
+       Docs: man:sshd(8)
+             man:sshd_config(5)
+   Main PID: 8625 (sshd)
+      Tasks: 1 (limit: 4602)
+     Memory: 3.5M (peak: 5.2M)
+        CPU: 323ms
+     CGroup: /system.slice/sshd.service
+             └─8625 "sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups"
+
+Sep 14 20:59:23 localhost.localdomain sshd[8625]: Server listening on :: port 2222.
+Sep 14 20:59:41 localhost.localdomain sshd-session[8630]: Accepted publickey for heitor from 100.127.64.96 port 48583 ssh2: ED25519 SHA256:iMo2er66rNIcmaC3IpPif9Lwb9fUdMO1y927FD0NPsY
+Sep 14 20:59:41 localhost.localdomain sshd-session[8630]: pam_unix(sshd:session): session opened for user heitor(uid=1003) by heitor(uid=0)
+Sep 14 20:59:53 localhost.localdomain sshd-session[8672]: Connection reset by authenticating user heitor 100.127.64.96 port 48588 [preauth]
+Sep 14 21:01:43 localhost.localdomain sshd-session[8742]: Connection reset by authenticating user heitor 100.127.64.96 port 48625 [preauth]
+Sep 14 21:02:02 localhost.localdomain sshd-session[8754]: Invalid user usuario_fantasma from 100.127.64.96 port 48632
+Sep 14 21:02:02 localhost.localdomain sshd-session[8754]: Connection reset by invalid user usuario_fantasma 100.127.64.96 port 48632 [preauth]
+Sep 14 21:03:00 localhost.localdomain sshd-session[8790]: Connection reset by authenticating user heitor 100.127.64.96 port 11028 [preauth]
+Sep 14 21:03:21 localhost.localdomain sshd-session[8806]: Accepted publickey for heitor from 100.127.64.96 port 11036 ssh2: ED25519 SHA256:iMo2er66rNIcmaC3IpPif9Lwb9fUdMO1y927FD0NPsY
+Sep 14 21:03:22 localhost.localdomain sshd-session[8806]: pam_unix(sshd:session): session opened for user heitor(uid=1003) by heitor(uid=0)
