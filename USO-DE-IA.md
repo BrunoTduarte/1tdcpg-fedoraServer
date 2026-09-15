@@ -1,7 +1,7 @@
 # Uso de IA — Grupo 5 (Fedora Server)
 
 ## Ferramenta utilizada
-- **Claude Sonnet 5** — revisão e correção do script ssh-sentinel.sh
+- **Claude Sonnet 5** — revisão e correção do script `ssh-sentinel.sh`
 - **Claude Sonnet 4.6** — geração de wordlist e execução assistida do teste de brute force com Hydra
 
 ## Onde a IA foi usada
