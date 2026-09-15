@@ -1,4 +1,4 @@
-# Uso de IA Generativa — Grupo 5 (Fedora Server)
+# Uso de IA — Grupo 5 (Fedora Server)
 
 ## Ferramenta utilizada
 - **Claude Sonnet 5** — revisão e correção do script ssh-sentinel.sh
