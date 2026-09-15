@@ -157,3 +157,223 @@ Ao terminar, clique em **Reboot System**.
  
 Na reinicialização, o GRUB solicitará a **passphrase do LUKS** antes de carregar o sistema.
  
+---
+ 
+## 5. Pós-instalação
+ 
+### Snapshot 1 — pós-instalação limpa
+ 
+Antes de qualquer configuração, tire um snapshot da VM:
+ 
+**VirtualBox → Máquina → Tirar Snapshot** → Nome: `pos-instalacao-limpa`
+ 
+### Verificações obrigatórias
+ 
+```bash
+# Sistema e SELinux
+cat /etc/os-release
+uname -r
+getenforce        # deve retornar: Enforcing
+sestatus
+ 
+# Disco, LUKS e LVM
+lsblk -f
+cryptsetup luksDump /dev/sda3
+pvs ; vgs ; lvs
+findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS
+cat /etc/fstab
+cat /etc/crypttab
+```
+ 
+### Criação dos usuários
+ 
+```bash
+# Criar usuários do grupo
+useradd -m -G wheel sshadmin
+passwd sshadmin
+ 
+useradd -m -G wheel aluno2
+passwd aluno2
+ 
+useradd -m -G wheel aluno3
+passwd aluno3
+ 
+# Criar grupo dedicado para SSH
+groupadd sshusers
+usermod -aG sshusers sshadmin
+usermod -aG sshusers aluno2
+usermod -aG sshusers aluno3
+```
+ 
+---
+ 
+## 6. Disco secundário de 20 GB — Exercício de ciclo de vida LVM
+ 
+Após a instalação, adicione o disco secundário:
+ 
+**VirtualBox (VM desligada) → Configurações → Armazenamento → Controladora SATA → Adicionar disco → 20 GB**
+ 
+Ligue a VM e execute:
+ 
+```bash
+# Verificar se o disco foi reconhecido
+lsblk
+ 
+# Criar Physical Volume
+pvcreate /dev/sdb
+ 
+# Estender o Volume Group
+vgextend LVM-vg_sistema /dev/sdb
+ 
+# Estender o /home em 10 GB
+lvextend -L +10G /dev/LVM-vg_sistema/home
+ 
+# Crescer o filesystem a quente (sem desligar)
+xfs_growfs /home
+ 
+# Verificar o novo tamanho
+lvs
+df -h /home
+```
+ 
+> O `/home` passa de ~10 GiB para ~20 GiB **sem desligar a VM** — isso demonstra o ciclo de vida do LVM.
+ 
+---
+ 
+## 7. Opções de montagem restritivas
+ 
+Edite o `/etc/fstab` para adicionar opções de segurança:
+ 
+```bash
+# Fazer backup antes de editar
+cp /etc/fstab /etc/fstab.bak
+```
+ 
+| Mount Point | Opções adicionadas | Proteção |
+|-------------|-------------------|----------|
+| `/tmp` | `nodev,nosuid,noexec` | Impede execução de payload em diretório mundial |
+| `/var/tmp` | `nodev,nosuid,noexec` | Idem para diretório temporário de serviços |
+| `/var/log` | `nodev,nosuid,noexec` | Impede staging de arquivos na área de log |
+| `/home` | `nodev,nosuid` | Impede binários SUID no diretório do usuário |
+ 
+Aplicar sem reiniciar:
+ 
+```bash
+mount -o remount /tmp
+mount -o remount /var/tmp
+mount -o remount /var/log
+mount -o remount /home
+```
+ 
+Verificar:
+ 
+```bash
+findmnt -o TARGET,SOURCE,FSTYPE,OPTIONS | grep -E "/home|/tmp|/var/log|/var/tmp"
+```
+ 
+---
+ 
+## Conflitos identificados e decisões tomadas
+ 
+O PDF do trabalho alerta: *"Vai dar conflito — e tudo bem. Documentar o conflito e a decisão vale mais nota do que copiar a tabela sem testar."*
+ 
+### Conflito 1 — `noexec` em `/var/tmp` pode quebrar atualizações
+ 
+**Problema:** O `dnf` (gerenciador de pacotes do Fedora) usa `/var/tmp` para descompactar pacotes durante atualizações. Com `noexec`, scripts de pós-instalação que precisam ser executados a partir desse diretório podem falhar.
+ 
+**Teste realizado:**
+```bash
+dnf check-update
+# Retornou atualizações disponíveis normalmente
+```
+ 
+**Resultado:** A verificação de atualizações funcionou. Atualizações simples não foram impactadas. Porém atualizações que executam scripts em `/var/tmp` podem falhar.
+ 
+**Decisão:** Mantemos `noexec` em `/var/tmp` pois o ganho de segurança supera o risco. Em caso de falha de atualização, o procedimento é:
+ 
+```bash
+# Remover temporariamente o noexec, atualizar e restaurar
+mount -o remount,exec /var/tmp
+dnf update -y
+mount -o remount,noexec /var/tmp
+```
+ 
+---
+ 
+### Conflito 2 — `noexec` em `/var/tmp` e `/var` pode quebrar containers
+ 
+**Problema:** Ferramentas como Docker e Podman usam `/var/tmp` e `/var` para armazenar e executar layers de containers. O `noexec` impede a execução de binários nesses diretórios, quebrando o funcionamento de containers.
+ 
+**Decisão:** Como este servidor não executa containers, mantemos as restrições. Em ambientes com containers, a recomendação seria:
+ 
+```bash
+# Remover noexec do /var caso containers sejam necessários
+# e compensar com outras medidas como SELinux policies
+```
+ 
+---
+ 
+### Conflito 3 — `/boot` sem `noexec`
+ 
+**Problema:** O `/boot` não recebe `noexec` porque o GRUB precisa ler e executar o kernel a partir desse diretório durante o boot.
+ 
+**Risco residual:** O `/boot` fica fora do container LUKS — um atacante com acesso físico ao disco poderia manipular o kernel ou o initramfs antes da autenticação LUKS.
+ 
+**Mitigação:** O LUKS protege os dados em repouso. O `/boot` é a superfície de ataque residual conhecida e aceita neste modelo de segurança. A solução completa seria Secure Boot com chaves próprias, o que está fora do escopo deste trabalho.
+ 
+---
+ 
+## 8. Acesso remoto dos integrantes — Tailscale
+ 
+Para acesso remoto sem redirecionamento de porta no roteador:
+ 
+```bash
+# Instalar e ativar o Tailscale no Fedora
+dnf install -y tailscale
+systemctl enable --now tailscaled
+tailscale up
+```
+ 
+Autentique no link gerado. O IP do Fedora na rede Tailscale é `100.98.214.73`.
+ 
+Os integrantes instalam o Tailscale em seus PCs (tailscale.com/download) e conectam via SSH:
+ 
+```bash
+ssh sshadmin@100.98.214.73 -p 2222
+```
+ 
+---
+ 
+## 9. Snapshot 2 — pós-configuração inicial
+ 
+Após todas as configurações:
+ 
+**VirtualBox → Máquina → Tirar Snapshot** → Nome: `pos-configuracao-inicial`
+ 
+---
+ 
+## Troubleshooting
+ 
+| Problema | Causa | Solução |
+|----------|-------|---------|
+| VM boota pela ISO após instalação | ISO ainda anexada | Remover ISO em Configurações → Armazenamento |
+| Login incorreto no boot | Confundiu passphrase LUKS com senha do usuário | São senhas diferentes — LUKS é no boot, login é depois |
+| SSH recusa conexão | Porta mudada para 2222 | Usar `ssh usuario@ip -p 2222` |
+| `nano` não encontrado | Não instalado por padrão no Fedora Server | Usar `vi` ou instalar com `dnf install nano` |
+| MCP não conecta após hardening SSH | Porta ou autenticação mudada | Atualizar `fedora_mcp.py` com nova porta e chave |
+ 
+---
+ 
+## Evidências coletadas
+ 
+Todas as evidências estão na pasta `evidencias/` do repositório:
+ 
+- `lsblk-f.txt` — estrutura de discos e LUKS
+- `pvs-vgs-lvs.txt` — volumes físicos e lógicos
+- `findmnt.txt` — pontos de montagem com opções
+- `fstab.txt` — configuração de montagem
+- `crypttab.txt` — container LUKS registrado
+- `os-release.txt` — versão do sistema
+- `sestatus.txt` — SELinux Enforcing
+- `sshd-status.txt` — SSH ativo
+- prints do particionamento no Anaconda
